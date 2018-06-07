@@ -495,6 +495,19 @@ var math = Numbas.math = /** @lends Numbas.math */ {
         for(degree=1; (a=n/Math.pow(Math.PI,degree))>1 && Math.abs(a-math.round(a))>0.00000001; degree++) {}
         return( a>=1 ? degree : 0 );
     },
+    /** If `n` can be written in the form `a*pi^n`, where `a` is an integer, return `a`, otherwise return `n`.
+     * @param {Number} n
+     * @returns {Number}
+     */
+    removePi: function(n) {
+        var d = math.piDegree(n);
+        if(d>0) {
+            n /= Math.pow(Math.PI,d);
+            return Math.round(n);
+        } else {
+            return n;
+        }
+    },
     /** Add the given number of zero digits to a string representation of a number.
      * @param {String} n - a string representation of a number
      * @param {Number} digits - the number of digits to add

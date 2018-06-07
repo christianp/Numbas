@@ -492,9 +492,7 @@ newBuiltin('gcd_without_pi_or_i', [TNum,TNum], TNum, function(a,b) {    // take 
         if(b.complex && b.re==0) {
             b = b.im;
         }
-        a = a/math.pow(Math.PI,math.piDegree(a));
-        b = b/math.pow(Math.PI,math.piDegree(b));
-        return math.gcf(a,b);
+        return math.gcf(math.removePi(a),math.removePi(b));
 } );
 newBuiltin('lcm', [TNum,TNum], TNum, math.lcm );
 newBuiltin('lcm', [TList], TNum, function(l){
