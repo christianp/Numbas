@@ -1,4 +1,4 @@
-// Compiled using  runtime/scripts/numbas.js  runtime/scripts/localisation.js  runtime/scripts/util.js  runtime/scripts/math.js  runtime/scripts/i18next/i18next.js  runtime/scripts/jme-rules.js  runtime/scripts/jme.js  runtime/scripts/jme-builtins.js  runtime/scripts/jme-display.js  runtime/scripts/jme-variables.js  runtime/scripts/part.js  runtime/scripts/question.js  runtime/scripts/schedule.js  runtime/scripts/marking.js  runtime/scripts/json.js  themes/default/files/scripts/answer-widgets.js ./runtime/scripts/parts/numberentry.js ./runtime/scripts/parts/gapfill.js ./runtime/scripts/parts/information.js ./runtime/scripts/parts/jme.js ./runtime/scripts/parts/multipleresponse.js ./runtime/scripts/parts/custom_part_type.js ./runtime/scripts/parts/extension.js ./runtime/scripts/parts/matrixentry.js ./runtime/scripts/parts/patternmatch.js
+// Compiled using  runtime/scripts/numbas.js  runtime/scripts/localisation.js  runtime/scripts/util.js  runtime/scripts/math.js  runtime/scripts/i18next/i18next.js  runtime/scripts/jme-rules.js  runtime/scripts/jme.js  runtime/scripts/jme-builtins.js  runtime/scripts/jme-display.js  runtime/scripts/jme-variables.js  runtime/scripts/part.js  runtime/scripts/question.js  runtime/scripts/schedule.js  runtime/scripts/marking.js  runtime/scripts/json.js  themes/default/files/scripts/answer-widgets.js ./runtime/scripts/parts/patternmatch.js ./runtime/scripts/parts/matrixentry.js ./runtime/scripts/parts/extension.js ./runtime/scripts/parts/custom_part_type.js ./runtime/scripts/parts/multipleresponse.js ./runtime/scripts/parts/jme.js ./runtime/scripts/parts/information.js ./runtime/scripts/parts/gapfill.js ./runtime/scripts/parts/numberentry.js
 // From the Numbas compiler directory
 /*
 Copyright 2011-14 Newcastle University
@@ -5179,7 +5179,7 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['0-?;x',[],'-x']
     ],
     zeroPower: [
-        ['?;x^0',[],'1']
+        ['?;x^0',['!(x=0)'],'1']
     ],
     noLeadingMinus: [
         ['-?;x+?;y',[],'y-x'],                                            //don't start with a unary minus
@@ -5210,7 +5210,7 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['?;n/?;m',['n isa "complex"','m isa "complex"','re(n)=0','re(m)=0'],'eval(n/i)/eval(m/i)']            // cancel i when numerator and denominator are both purely imaginary
     ],
     zeroBase: [
-        ['0^?;x',[],'0']
+        ['0^?;x',['!(x=0)'],'0']
     ],
     constantsFirst: [
         ['?;x*?;n',['n isa "number"','!(x isa "number")','n<>i'],'n*x'],
@@ -5229,7 +5229,9 @@ var simplificationRules = jme.rules.simplificationRules = {
     ],
     trig: [
         ['sin(?;n)',['n isa "number"','isint(2*n/pi)'],'eval(sin(n))'],
+		['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(2*(n/m)/pi)'],'eval(sin(n/m))'],
         ['cos(?;n)',['n isa "number"','isint(2*n/pi)'],'eval(cos(n))'],
+		['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(2*(n/m)/pi)'],'eval(cos(n/m))'],
         ['tan(?;n)',['n isa "number"','isint(n/pi)'],'0'],
         ['cosh(0)',[],'1'],
         ['sinh(0)',[],'0'],
@@ -5239,7 +5241,7 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['sin^(?;n)(?;x)',[],'sin(x)^n']
     ],
     otherNumbers: [
-        ['?;n^?;m',['n isa "number"','m isa "number"'],'eval(n^m)']
+        ['?;n^?;m',['n isa "number"','m isa "number"','!((n=0) and (m=0))'],'eval(n^m)']
     ],
     cancelTerms: [
         // x+y or rest+x+y
@@ -5335,6 +5337,47 @@ var expandBracketsRules = [
     ['(?;x-?;y)*?;z',[],'x*z-y*z'],
     ['?;x*(?;y-?;z)',[],'x*y-x*z']
 ]
+// other new rules 
+var trigSurdsRules = [
+	['sin(?;n)',['n isa "number"','isint(3*n/pi)','!(isint(n/pi))'],'eval(sin(n)*2/sqrt(3))*sqrt(3)/2'],
+	['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(sin(n/m)*2/sqrt(3))*sqrt(3)/2'],
+	['cos(?;n)',['n isa "number"','isint(3*n/pi)','!(isint(n/pi))'],'eval(cos(n)*2)/2'],
+	['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(cos(n/m)*2)/2'],
+	['tan(?;n)',['n isa "number"','isint(3*n/pi)','!(isint(n/pi))'],'eval(tan(n)/sqrt(3))*sqrt(3)'],
+	['tan(?;n/?;m)',['n isa "number"','m isa "number"','isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(tan(n/m)/sqrt(3))*sqrt(3)'],
+	['sin(?;n)',['n isa "number"','isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(sin(n)*2)/2'],
+	['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(sin(n/m)*2)/2'],
+	['cos(?;n)',['n isa "number"','isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(cos(n)*2/sqrt(3))*sqrt(3)/2'],
+	['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(cos(n/m)*2/sqrt(3))*sqrt(3)/2'],
+	['tan(?;n)',['n isa "number"','isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(tan(n)*sqrt(3))/sqrt(3)'],
+	['tan(?;n/?;m)',['n isa "number"','m isa "number"','isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(tan(n/m)*sqrt(3))/sqrt(3)'],
+	['sin(?;n)',['n isa "number"','isint(4*n/pi)','!(isint(2*n/pi))'],'eval(sin(n)*sqrt(2))/sqrt(2)'],
+	['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(sin(n/m)*sqrt(2))/sqrt(2)'],
+	['cos(?;n)',['n isa "number"','isint(4*n/pi)','!(isint(2*n/pi))'],'eval(cos(n)*sqrt(2))/sqrt(2)'],
+	['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(cos(n/m)*sqrt(2))/sqrt(2)'],
+	['tan(?;n)',['n isa "number"','isint(4*n/pi)','!(isint(2*n/pi))'],'eval(tan(n))'],
+	['tan(?;n/?;m)',['n isa "number"','m isa "number"','isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(tan(n/m))'] 
+]
+var oddEvenRules = [
+	['sin(-?;x)',[],'-sin(x)'],
+	['cos(-?;x)',[],'cos(x)'],
+	['tan(-?;x)',[],'-tan(x)'],
+	['sinh(-?;x)',[],'-sinh(x)'],
+	['cosh(-?;x)',[],'cosh(x)'],
+	['tanh(-?;x)',[],'-tanh(x)'],
+	['(-?;x)^(?;n)',['n isa "number"',"isint(n/2)"],'x^n'],
+	['(-?;x)^(?;n)',['n isa "number"',"isint((n-1)/2)"],'-x^n']
+]
+var commonFactorsRules = [
+	['?;n*(?;x)+?;n*(?;y)',['n isa "number"'],'n*(x+y)']
+]
+var calcErrorRules = [
+	['?;x',['x isa "number"','x>-0.0000000001','x<0'],'0'],
+	['?;x',['x isa "number"','x<0.0000000001','x>0'],'0'],
+	['?;x',['x isa "number"','x>0.9999999999','x<1'],'1'],
+	['?;x',['x isa "number"','x<1.0000000001','x>1'],'1'],
+]
+
 /** Compile an array of rules (in the form `[pattern,conditions[],result]` to {@link Numbas.jme.rules.Rule} objects
  * @param {Array} rules
  * @returns {Numbas.jme.rules.Ruleset}
@@ -5352,7 +5395,7 @@ var compileRules = jme.rules.compileRules = function(rules)
 }
 var all=[];
 var compiledSimplificationRules = {};
-var notAll = ['canonicalOrder','expandBrackets'];
+var notAll = ['canonicalOrder','expandBrackets','trigSurds','oddEven','commonFactors','calcError'];
 for(var x in simplificationRules)
 {
     compiledSimplificationRules[x] = compiledSimplificationRules[x.toLowerCase()] = compileRules(simplificationRules[x]);
@@ -5362,6 +5405,10 @@ for(var x in simplificationRules)
 }
 compiledSimplificationRules['canonicalorder'] = compileRules(canonicalOrderRules);
 compiledSimplificationRules['expandbrackets'] = compileRules(expandBracketsRules);
+compiledSimplificationRules['trigsurds'] = compileRules(trigSurdsRules);
+compiledSimplificationRules['oddeven'] = compileRules(oddEvenRules);
+compiledSimplificationRules['commonfactors'] = compileRules(commonFactorsRules);
+compiledSimplificationRules['calcerror'] = compileRules(calcErrorRules);
 compiledSimplificationRules['all'] = new Ruleset(all,{});
 jme.rules.simplificationRules = compiledSimplificationRules;
 });
