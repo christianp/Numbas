@@ -175,13 +175,23 @@ var matchTree = jme.rules.matchTree = function(ruleTree,exprTree,doCommute) {
     var ruleTok = ruleTree.tok;
     var exprTok = exprTree.tok;
     if(jme.isOp(ruleTok,';')) {
-        if(ruleTree.args[1].tok.type!='name') {
-            throw(new Numbas.Error('jme.matchTree.group name not a name'));
+        var value;
+        var name;
+        switch(ruleTree.args[1].tok.type) {
+            case 'name':
+                name = ruleTree.args[1].tok.name;
+                value = exprTree;
+                break;
+            case 'keypair':
+                name = ruleTree.args[1].tok.key;
+                value = ruleTree.args[1].args[0];
+                break;
+            default:
+                throw(new Numbas.Error('jme.matchTree.group name not a name'));
         }
-        var name = ruleTree.args[1].tok.name;
         var m = matchTree(ruleTree.args[0],exprTree,doCommute);
         if(m) {
-            m[name] = exprTree;
+            m[name] = value;
             return m;
         } else {
             return false;
