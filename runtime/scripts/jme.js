@@ -1272,8 +1272,9 @@ Scope.prototype = /** @lends Numbas.jme.Scope.prototype */ {
                 return scope.getFunction(op)[0].evaluate(tree.args,scope);
             }
             else {
+                var args = [];
                 for(var i=0;i<tree.args.length;i++) {
-                    tree.args[i] = scope.evaluate(tree.args[i],null,noSubstitution);
+                    args.push(scope.evaluate(tree.args[i],null,noSubstitution));
                 }
                 var matchedFunction;
                 var fns = scope.getFunction(op);
@@ -1295,18 +1296,18 @@ Scope.prototype = /** @lends Numbas.jme.Scope.prototype */ {
                 for(var j=0;j<fns.length; j++)
                 {
                     var fn = fns[j];
-                    if(fn.typecheck(tree.args))
+                    if(fn.typecheck(args))
                     {
                         matchedFunction = fn;
                         break;
                     }
                 }
                 if(matchedFunction)
-                    return matchedFunction.evaluate(tree.args,scope);
+                    return matchedFunction.evaluate(args,scope);
                 else {
-                    for(var i=0;i<=tree.args.length;i++) {
-                        if(tree.args[i] && tree.args[i].unboundName) {
-                            throw(new Numbas.Error('jme.typecheck.no right type unbound name',{name:tree.args[i].name}));
+                    for(var i=0;i<=args.length;i++) {
+                        if(args[i] && args[i].unboundName) {
+                            throw(new Numbas.Error('jme.typecheck.no right type unbound name',{name:args[i].name}));
                         }
                     }
                     throw(new Numbas.Error('jme.typecheck.no right type definition',{op:op}));
