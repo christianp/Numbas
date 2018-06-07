@@ -616,8 +616,9 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['(?;x+?;n)-?;y',['n isa "number"'],'(x-y)+n'],
         ['(?;x-?;n)+?;y',['n isa "number"'],'(x+y)-n'],
         ['(?;x-?;n)-?;y',['n isa "number"'],'(x-y)-n'],
-        ['?;n*?;m',['n isa "number"','m isa "number"'],'eval(n*m)'],        //multiply numbers
+        ['?;n*?;m',['n isa "number" and n<>pi','m isa "number" and m<>pi'],'eval(n*m)'],        //multiply numbers
         ['?;x*?;n',['n isa "number"','!(x isa "number")','n<>i'],'n*x'],            //shift numbers to left hand side
+        ['pi*?;n',['n isa "number"','n<>pi and n<>i'],'n*pi'],            //shift pi to right hand side
         ['?;m*(?;n*?;x)',['m isa "number"','n isa "number"'],'eval(n*m)*x']
     ],
     simplifyFractions: [
