@@ -743,7 +743,7 @@ jme.Parser.prototype = /** @lends Numbas.jme.Parser.prototype */ {
                 var str = result[2];
                 token = new TString(jme.unescape(str));
             } else if(result = expr.match(this.re.re_keypair)) {
-                if(tokens.length==0 || tokens[tokens.length-1].type!='string') {
+                if(tokens.length==0 || (tokens[tokens.length-1].type!='string' && tokens[tokens.length-1].type!='name')) {
                     throw(new Numbas.Error('jme.tokenise.keypair key not a string',{type: tokens[tokens.length-1].type}));
                 }
                 token = new TKeyPair(tokens.pop().value);

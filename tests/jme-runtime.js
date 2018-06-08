@@ -1,4 +1,4 @@
-// Compiled using  runtime/scripts/numbas.js  runtime/scripts/localisation.js  runtime/scripts/util.js  runtime/scripts/math.js  runtime/scripts/i18next/i18next.js  runtime/scripts/jme-rules.js  runtime/scripts/jme.js  runtime/scripts/jme-builtins.js  runtime/scripts/jme-display.js  runtime/scripts/jme-variables.js  runtime/scripts/part.js  runtime/scripts/question.js  runtime/scripts/schedule.js  runtime/scripts/marking.js  runtime/scripts/json.js  themes/default/files/scripts/answer-widgets.js ./runtime/scripts/parts/patternmatch.js ./runtime/scripts/parts/matrixentry.js ./runtime/scripts/parts/extension.js ./runtime/scripts/parts/custom_part_type.js ./runtime/scripts/parts/multipleresponse.js ./runtime/scripts/parts/jme.js ./runtime/scripts/parts/information.js ./runtime/scripts/parts/gapfill.js ./runtime/scripts/parts/numberentry.js
+// Compiled using  runtime/scripts/numbas.js  runtime/scripts/localisation.js  runtime/scripts/util.js  runtime/scripts/math.js  runtime/scripts/i18next/i18next.js  runtime/scripts/jme-rules.js  runtime/scripts/jme.js  runtime/scripts/jme-builtins.js  runtime/scripts/jme-display.js  runtime/scripts/jme-variables.js  runtime/scripts/part.js  runtime/scripts/question.js  runtime/scripts/schedule.js  runtime/scripts/marking.js  runtime/scripts/json.js  themes/default/files/scripts/answer-widgets.js ./runtime/scripts/parts/numberentry.js ./runtime/scripts/parts/gapfill.js ./runtime/scripts/parts/information.js ./runtime/scripts/parts/jme.js ./runtime/scripts/parts/multipleresponse.js ./runtime/scripts/parts/custom_part_type.js ./runtime/scripts/parts/extension.js ./runtime/scripts/parts/matrixentry.js ./runtime/scripts/parts/patternmatch.js
 // From the Numbas compiler directory
 /*
 Copyright 2011-14 Newcastle University
@@ -2977,6 +2977,19 @@ var math = Numbas.math = /** @lends Numbas.math */ {
         for(degree=1; (a=n/Math.pow(Math.PI,degree))>1 && Math.abs(a-math.round(a))>0.00000001; degree++) {}
         return( a>=1 ? degree : 0 );
     },
+    /** If `n` can be written in the form `a*pi^n`, where `a` is an integer, return `a`, otherwise return `n`.
+     * @param {Number} n
+     * @returns {Number}
+     */
+    removePi: function(n) {
+        var d = math.piDegree(n);
+        if(d>0) {
+            n /= Math.pow(Math.PI,d);
+            return Math.round(n);
+        } else {
+            return n;
+        }
+    },
     /** Add the given number of zero digits to a string representation of a number.
      * @param {String} n - a string representation of a number
      * @param {Number} digits - the number of digits to add
@@ -4767,13 +4780,23 @@ var matchTree = jme.rules.matchTree = function(ruleTree,exprTree,doCommute) {
     var ruleTok = ruleTree.tok;
     var exprTok = exprTree.tok;
     if(jme.isOp(ruleTok,';')) {
-        if(ruleTree.args[1].tok.type!='name') {
-            throw(new Numbas.Error('jme.matchTree.group name not a name'));
+        var value;
+        var name;
+        switch(ruleTree.args[1].tok.type) {
+            case 'name':
+                name = ruleTree.args[1].tok.name;
+                value = exprTree;
+                break;
+            case 'keypair':
+                name = ruleTree.args[1].tok.key;
+                value = ruleTree.args[1].args[0];
+                break;
+            default:
+                throw(new Numbas.Error('jme.matchTree.group name not a name'));
         }
-        var name = ruleTree.args[1].tok.name;
         var m = matchTree(ruleTree.args[0],exprTree,doCommute);
         if(m) {
-            m[name] = exprTree;
+            m[name] = value;
             return m;
         } else {
             return false;
@@ -5135,16 +5158,16 @@ var collectRuleset = jme.rules.collectRuleset = function(set,scopeSets)
  */
 var simplificationRules = jme.rules.simplificationRules = {
     basic: [
-        ['?;x',['x isa "number"','x<0'],'-eval(-x)'],   // the value of a TNumber should be non-negative - pull the negation out as unary minus
+        ['m_number;x',['x<0'],'-eval(-x)'],   // the value of a TNumber should be non-negative - pull the negation out as unary minus
         ['+(?;x)',[],'x'],                    //get rid of unary plus
         ['?;x+(-?;y)',[],'x-y'],            //plus minus = minus
-        ['?;x+?;y',['y isa "number"','y<0'],'x-eval(-y)'],
-        ['?;x-?;y',['y isa "number"','y<0'],'x+eval(-y)'],
+        ['?;x+m_number;y',['y<0'],'x-eval(-y)'],
+        ['?;x-m_number;y',['y<0'],'x+eval(-y)'],
         ['?;x-(-?;y)',[],'x+y'],            //minus minus = plus
         ['-(-?;x)',[],'x'],                //unary minus minus = plus
         ['-?;x',['x isa "complex"','re(x)<0'],'eval(-x)'],
-        ['?;x+?;y',['x isa "number"','y isa "complex"','re(y)=0'],'eval(x+y)'],
-        ['-?;x+?;y',['x isa "number"','y isa "complex"','re(y)=0'],'-eval(x-y)'],
+        ['m_number;x+m_number;y',['y isa "complex"','re(y)=0'],'eval(x+y)'],
+        ['-m_number;x+m_number;y',['y isa "complex"','re(y)=0'],'-eval(x-y)'],
         ['(-?;x)/?;y',[],'-(x/y)'],            //take negation to left of fraction
         ['?;x/(-?;y)',[],'-(x/y)'],
         ['(-?;x)*?;y',['not (x isa "complex")'],'-(x*y)'],            //take negation to left of multiplication
@@ -5154,8 +5177,8 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['?;x+(?;y-?;z)',[],'(x+y)-z'],
         ['?;x-(?;y-?;z)',[],'(x-y)+z'],
         ['(?;x*?;y)*?;z',[],'x*(y*z)'],        //make sure multiplications go right-to-left
-        ['?;n*i',['n isa "number"'],'eval(n*i)'],            //always collect multiplication by i
-        ['i*?;n',['n isa "number"'],'eval(n*i)']
+        ['m_number;n*i',[],'eval(n*i)'],            //always collect multiplication by i
+        ['i*m_number;n',[],'eval(n*i)']
     ],
     unitFactor: [
         ['1*?;x',[],'x'],
@@ -5186,35 +5209,36 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['-0',[],'0']
     ],
     collectNumbers: [
-        ['-?;x-?;y',['x isa "number"','y isa "number"'],'-(x+y)'],                                        //collect minuses
-        ['?;n+?;m',['n isa "number"','m isa "number"'],'eval(n+m)'],    //add numbers
-        ['?;n-?;m',['n isa "number"','m isa "number"'],'eval(n-m)'],    //subtract numbers
-        ['?;n+?;x',['n isa "number"','!(x isa "number")'],'x+n'],        //add numbers last
-        ['(?;x+?;n)+?;m',['n isa "number"','m isa "number"'],'x+eval(n+m)'],    //collect number sums
-        ['(?;x-?;n)+?;m',['n isa "number"','m isa "number"'],'x+eval(m-n)'],
-        ['(?;x+?;n)-?;m',['n isa "number"','m isa "number"'],'x+eval(n-m)'],
-        ['(?;x-?;n)-?;m',['n isa "number"','m isa "number"'],'x-eval(n+m)'],
-        ['(?;x+?;n)+?;y',['n isa "number"'],'(x+y)+n'],                        //shift numbers to right hand side
-        ['(?;x+?;n)-?;y',['n isa "number"'],'(x-y)+n'],
-        ['(?;x-?;n)+?;y',['n isa "number"'],'(x+y)-n'],
-        ['(?;x-?;n)-?;y',['n isa "number"'],'(x-y)-n'],
-        ['?;n*?;m',['n isa "number"','m isa "number"'],'eval(n*m)'],        //multiply numbers
-        ['?;x*?;n',['n isa "number"','!(x isa "number")','n<>i'],'n*x'],            //shift numbers to left hand side
-        ['?;m*(?;n*?;x)',['m isa "number"','n isa "number"'],'eval(n*m)*x']
+        ['-m_number;x-m_number;y',[],'-(x+y)'],                                        //collect minuses
+        ['m_number;n+m_number;m',[],'eval(n+m)'],    //add numbers
+        ['m_number;n-m_number;m',[],'eval(n-m)'],    //subtract numbers
+        ['m_number;n+m_not(m_number);x',[],'x+n'],        //add numbers last
+        ['(?;x+m_number;n)+m_number;m',[],'x+eval(n+m)'],    //collect number sums
+        ['(?;x-m_number;n)+m_number;m',[],'x+eval(m-n)'],
+        ['(?;x+m_number;n)-m_number;m',[],'x+eval(n-m)'],
+        ['(?;x-m_number;n)-m_number;m',[],'x-eval(n+m)'],
+        ['(?;x+m_number;n)+?;y',[],'(x+y)+n'],                        //shift numbers to right hand side
+        ['(?;x+m_number;n)-?;y',[],'(x-y)+n'],
+        ['(?;x-m_number;n)+?;y',[],'(x+y)-n'],
+        ['(?;x-m_number;n)-?;y',[],'(x-y)-n'],
+        ['m_number;n * m_number;m',[],'eval(n*m)'],        //multiply numbers
+        ['m_not(m_number);x*m_number;n',['n<>i'],'n*x'],            //shift numbers to left hand side
+        ['pi*m_number;n',['n<>pi and n<>i'],'n*pi'],            //shift pi to right hand side
+        ['m_number;m*(m_number;n*?;x)',[],'eval(n*m)*x']
     ],
     simplifyFractions: [
-        ['?;n/?;m',['n isa "number"','m isa "number"','gcd_without_pi_or_i(n,m)>1'],'eval(n/gcd_without_pi_or_i(n,m))/eval(m/gcd_without_pi_or_i(n,m))'],            //cancel simple fraction
-        ['(?;n*?;x)/?;m',['n isa "number"','m isa "number"','gcd_without_pi_or_i(n,m)>1'],'(eval(n/gcd_without_pi_or_i(n,m))*x)/eval(m/gcd_without_pi_or_i(n,m))'],    //cancel algebraic fraction
-        ['?;n/(?;m*?;x)',['n isa "number"','m isa "number"','gcd_without_pi_or_i(n,m)>1'],'eval(n/gcd_without_pi_or_i(n,m))/(eval(m/gcd_without_pi_or_i(n,m))*x)'],
-        ['(?;n*?;x)/(?;m*?;y)',['n isa "number"','m isa "number"','gcd_without_pi_or_i(n,m)>1'],'(eval(n/gcd_without_pi_or_i(n,m))*x)/(eval(m/gcd_without_pi_or_i(n,m))*y)'],
-        ['?;n/?;m',['n isa "complex"','m isa "complex"','re(n)=0','re(m)=0'],'eval(n/i)/eval(m/i)']            // cancel i when numerator and denominator are both purely imaginary
+        ['m_number;n/m_number;m',['gcd_without_pi_or_i(n,m)>1'],'eval(n/gcd_without_pi_or_i(n,m))/eval(m/gcd_without_pi_or_i(n,m))'],            //cancel simple fraction
+        ['(m_number;n*?;x)/m_number;m',['gcd_without_pi_or_i(n,m)>1'],'(eval(n/gcd_without_pi_or_i(n,m))*x)/eval(m/gcd_without_pi_or_i(n,m))'],    //cancel algebraic fraction
+        ['m_number;n/(m_number;m*?;x)',['gcd_without_pi_or_i(n,m)>1'],'eval(n/gcd_without_pi_or_i(n,m))/(eval(m/gcd_without_pi_or_i(n,m))*x)'],
+        ['(m_number;n*?;x)/(m_number;m*?;y)',['gcd_without_pi_or_i(n,m)>1'],'(eval(n/gcd_without_pi_or_i(n,m))*x)/(eval(m/gcd_without_pi_or_i(n,m))*y)'],
+        ['m_number;n/m_number;m',['n isa "complex"','m isa "complex"','re(n)=0','re(m)=0'],'eval(n/i)/eval(m/i)']            // cancel i when numerator and denominator are both purely imaginary
     ],
     zeroBase: [
         ['0^?;x',['!(x=0)'],'0']
     ],
     constantsFirst: [
-        ['?;x*?;n',['n isa "number"','!(x isa "number")','n<>i'],'n*x'],
-        ['?;x*(?;n*?;y)',['n isa "number"','n<>i','!(x isa "number")'],'n*(x*y)']
+        ['m_not(m_number);x*m_number;n',['n<>i'],'n*x'],
+        ['m_not(m_number);x*(m_number;n*?;y)',['n<>i'],'n*(x*y)']
     ],
     sqrtProduct: [
         ['sqrt(?;x)*sqrt(?;y)',[],'sqrt(x*y)']
@@ -5225,14 +5249,14 @@ var simplificationRules = jme.rules.simplificationRules = {
     sqrtSquare: [
         ['sqrt(?;x^2)',[],'x'],
         ['sqrt(?;x)^2',[],'x'],
-        ['sqrt(?;n)',['n isa "number"','isint(sqrt(n))'],'eval(sqrt(n))']
+        ['sqrt(m_number;n)',['isint(sqrt(n))'],'eval(sqrt(n))']
     ],
     trig: [
-        ['sin(?;n)',['n isa "number"','isint(2*n/pi)'],'eval(sin(n))'],
-		['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(2*(n/m)/pi)'],'eval(sin(n/m))'],
-        ['cos(?;n)',['n isa "number"','isint(2*n/pi)'],'eval(cos(n))'],
-		['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(2*(n/m)/pi)'],'eval(cos(n/m))'],
-        ['tan(?;n)',['n isa "number"','isint(n/pi)'],'0'],
+        ['sin(m_number;n)',['isint(2*n/pi)'],'eval(sin(n))'],
+		['sin(m_number;n/m_number;m)',['isint(2*(n/m)/pi)'],'eval(sin(n/m))'],
+        ['cos(m_number;n)',['isint(2*n/pi)'],'eval(cos(n))'],
+		['cos(m_number;n/m_number;m)',['isint(2*(n/m)/pi)'],'eval(cos(n/m))'],
+        ['tan(m_number;n)',['isint(n/pi)'],'0'],
         ['cosh(0)',[],'1'],
         ['sinh(0)',[],'0'],
         ['tanh(0)',[],'0']
@@ -5241,75 +5265,75 @@ var simplificationRules = jme.rules.simplificationRules = {
         ['sin^(?;n)(?;x)',[],'sin(x)^n']
     ],
     otherNumbers: [
-        ['?;n^?;m',['n isa "number"','m isa "number"','!((n=0) and (m=0))'],'eval(n^m)']
+        ['m_number;n^m_number;m',['!((n=0) and (m=0))'],'eval(n^m)']
     ],
     cancelTerms: [
         // x+y or rest+x+y
-        ['(?;rest+?;n*?;x) + ?;m*?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest+eval(n+m)*x'],
-        ['(?;rest+?;n*?;x) + ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest+eval(n+1)*x'],
-        ['(?;rest+?;x) + ?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest+eval(n+1)*x'],
+        ['(?;rest+m_number;n*?;x) + m_number;m*?;y',['canonical_compare(x,y)=0'],'rest+eval(n+m)*x'],
+        ['(?;rest+m_number;n*?;x) + ?;y',['canonical_compare(x,y)=0'],'rest+eval(n+1)*x'],
+        ['(?;rest+?;x) + m_number;n*?;y',['canonical_compare(x,y)=0'],'rest+eval(n+1)*x'],
         ['(?;rest+?;x) + ?;y',['canonical_compare(x,y)=0'],'rest+2*x'],
-        ['?;n*?;x+?;m*?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'eval(n+m)*x'],
-        ['?;n*?;x+?;y',['n isa "number"','canonical_compare(x,y)=0'],'eval(n+1)*x'],
-        ['-?;x+?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'eval(n-1)*x'],
+        ['m_number;n*?;x+m_number;m*?;y',['canonical_compare(x,y)=0'],'eval(n+m)*x'],
+        ['m_number;n*?;x+?;y',['canonical_compare(x,y)=0'],'eval(n+1)*x'],
+        ['-?;x+m_number;n*?;y',['canonical_compare(x,y)=0'],'eval(n-1)*x'],
         ['-?;x+?;y',['canonical_compare(x,y)=0'],'0*x'],
-        ['?;x+?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'eval(n+1)*x'],
+        ['?;x+m_number;n*?;y',['canonical_compare(x,y)=0'],'eval(n+1)*x'],
         ['?;x+?;y',['canonical_compare(x,y)=0'],'2*x'],
         // x-y or rest+x-y
-        ['(?;rest+?;n*?;x) - ?;m*?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest+eval(n-m)*x'],
-        ['(?;rest+?;n*?;x) - ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest+eval(n-1)*x'],
-        ['(?;rest+?;x) - ?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest+eval(1-n)*x'],
+        ['(?;rest+m_number;n*?;x) - m_number;m*?;y',['canonical_compare(x,y)=0'],'rest+eval(n-m)*x'],
+        ['(?;rest+m_number;n*?;x) - ?;y',['canonical_compare(x,y)=0'],'rest+eval(n-1)*x'],
+        ['(?;rest+?;x) - m_number;n*?;y',['canonical_compare(x,y)=0'],'rest+eval(1-n)*x'],
         ['(?;rest+?;x) - ?;y',['canonical_compare(x,y)=0'],'rest+0*x'],
-        ['?;n*?;x-?;m*?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'eval(n-m)*x'],
-        ['?;n*?;x-?;y',['n isa "number"','canonical_compare(x,y)=0'],'eval(n-1)*x'],
-        ['-?;x-?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'eval(-1-n)*x'],
+        ['m_number;n*?;x-m_number;m*?;y',['canonical_compare(x,y)=0'],'eval(n-m)*x'],
+        ['m_number;n*?;x-?;y',['canonical_compare(x,y)=0'],'eval(n-1)*x'],
+        ['-?;x-m_number;n*?;y',['canonical_compare(x,y)=0'],'eval(-1-n)*x'],
         ['-?;x-?;y',['canonical_compare(x,y)=0'],'-2*x'],
-        ['?;x-?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'eval(1-n)*x'],
+        ['?;x-m_number;n*?;y',['canonical_compare(x,y)=0'],'eval(1-n)*x'],
         ['?;x-?;y',['canonical_compare(x,y)=0'],'0*x'],
         // rest-x-y or rest-x+y
-        ['(?;rest-?;n*?;x) + ?;m*?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest+eval(m-n)*x'],
-        ['(?;rest-?;n*?;x) + ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest+eval(1-n)*x'],
-        ['(?;rest-?;x) + ?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest+eval(1-n)*x'],
-        ['(?;rest-?;n*?;x) - ?;m*?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest-eval(n+m)*x'],
-        ['(?;rest-?;n*?;x) - ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest-eval(n+1)*x'],
-        ['(?;rest-?;x) - ?;n*?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest-eval(1+n)*x'],
+        ['(?;rest-m_number;n*?;x) + m_number;m*?;y',['canonical_compare(x,y)=0'],'rest+eval(m-n)*x'],
+        ['(?;rest-m_number;n*?;x) + ?;y',['canonical_compare(x,y)=0'],'rest+eval(1-n)*x'],
+        ['(?;rest-?;x) + m_number;n*?;y',['canonical_compare(x,y)=0'],'rest+eval(1-n)*x'],
+        ['(?;rest-m_number;n*?;x) - m_number;m*?;y',['canonical_compare(x,y)=0'],'rest-eval(n+m)*x'],
+        ['(?;rest-m_number;n*?;x) - ?;y',['canonical_compare(x,y)=0'],'rest-eval(n+1)*x'],
+        ['(?;rest-?;x) - m_number;n*?;y',['canonical_compare(x,y)=0'],'rest-eval(1+n)*x'],
         ['(?;rest-?;x) - ?;y',['canonical_compare(x,y)=0'],'rest-2*x'],
         ['(?;rest-?;x) + ?;y',['canonical_compare(x,y)=0'],'rest+0*x'],
-        ['(?;rest+?;n/?;x) + ?;m/?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest+eval(n+m)/x'],
-        ['(?;n)/(?;x)+(?;m)/(?;y)',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'eval(n+m)/x'],
-        ['(?;rest+?;n/?;x) - ?;m/?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest+eval(n-m)/x'],
-        ['?;n/?;x-?;m/?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'eval(n-m)/x'],
-        ['(?;rest-?;n/?;x) + ?;m/?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest+eval(m-n)/x'],
-        ['(?;rest-?;n/?;x) - ?;m/?;y',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest-eval(n+m)/x']
+        ['(?;rest+m_number;n/?;x) + m_number;m/?;y',['canonical_compare(x,y)=0'],'rest+eval(n+m)/x'],
+        ['(m_number;n)/(?;x)+(m_number;m)/(?;y)',['canonical_compare(x,y)=0'],'eval(n+m)/x'],
+        ['(?;rest+m_number;n/?;x) - m_number;m/?;y',['canonical_compare(x,y)=0'],'rest+eval(n-m)/x'],
+        ['m_number;n/?;x-m_number;m/?;y',['canonical_compare(x,y)=0'],'eval(n-m)/x'],
+        ['(?;rest-m_number;n/?;x) + m_number;m/?;y',['canonical_compare(x,y)=0'],'rest+eval(m-n)/x'],
+        ['(?;rest-m_number;n/?;x) - m_number;m/?;y',['canonical_compare(x,y)=0'],'rest-eval(n+m)/x']
     ],
     cancelFactors: [
         // x*y or rest*x*y
-        ['(?;rest*(?;x)^(?;n)) * (?;y)^(?;m)',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest*x^(n+m)'],
-        ['(?;rest*(?;x)^(?;n)) * ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(n+1)'],
-        ['(?;rest*?;x) * (?;y)^(?;n)',['n isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(n+1)'],
+        ['(?;rest*(?;x)^(m_number;n)) * (?;y)^(m_number;m)',['canonical_compare(x,y)=0'],'rest*x^(n+m)'],
+        ['(?;rest*(?;x)^(m_number;n)) * ?;y',['canonical_compare(x,y)=0'],'rest*x^eval(n+1)'],
+        ['(?;rest*?;x) * (?;y)^(m_number;n)',['canonical_compare(x,y)=0'],'rest*x^eval(n+1)'],
         ['(?;rest*?;x) * ?;y',['canonical_compare(x,y)=0'],'rest*x^2'],
-        ['(?;x)^(?;n)*(?;y)^(?;m)',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'x^eval(n+m)'],
-        ['(?;x)^(?;n)*?;y',['n isa "number"','canonical_compare(x,y)=0'],'x^eval(n+1)'],
-        ['(?;x)^(-?;n)*?;y',['n isa "number"','canonical_compare(x,y)=0'],'x^eval(-n+1)'],
-        ['?;x*(?;y)^(?;n)',['n isa "number"','canonical_compare(x,y)=0'],'x^eval(n+1)'],
-        ['?;x*(?;y)^(-?;n)',['n isa "number"','canonical_compare(x,y)=0'],'x^eval(-n+1)'],
+        ['(?;x)^(m_number;n)*(?;y)^(m_number;m)',['canonical_compare(x,y)=0'],'x^eval(n+m)'],
+        ['(?;x)^(m_number;n)*?;y',['canonical_compare(x,y)=0'],'x^eval(n+1)'],
+        ['(?;x)^(-m_number;n)*?;y',['canonical_compare(x,y)=0'],'x^eval(-n+1)'],
+        ['?;x*(?;y)^(m_number;n)',['canonical_compare(x,y)=0'],'x^eval(n+1)'],
+        ['?;x*(?;y)^(-m_number;n)',['canonical_compare(x,y)=0'],'x^eval(-n+1)'],
         ['?;x*?;y',['canonical_compare(x,y)=0'],'x^2'],
         // x/y or rest*x/y
-        ['(?;rest*(?;x)^(?;n)) / ((?;y)^(?;m))',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(n-m)'],
-        ['(?;rest*(?;x)^(?;n)) / ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(n-1)'],
-        ['(?;rest*?;x) / ((?;y)^(?;n))',['n isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(1-n)'],
+        ['(?;rest*(?;x)^(m_number;n)) / ((?;y)^(m_number;m))',['canonical_compare(x,y)=0'],'rest*x^eval(n-m)'],
+        ['(?;rest*(?;x)^(m_number;n)) / ?;y',['canonical_compare(x,y)=0'],'rest*x^eval(n-1)'],
+        ['(?;rest*?;x) / ((?;y)^(m_number;n))',['canonical_compare(x,y)=0'],'rest*x^eval(1-n)'],
         ['(?;rest*?;x) / ?;y',['canonical_compare(x,y)=0'],'rest*x^0'],
-        ['(?;x)^(?;n) / (?;y)^(?;m)',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'x^eval(n-m)'],
-        ['(?;x)^(?;n) / ?;y',['n isa "number"','canonical_compare(x,y)=0'],'x^eval(n-1)'],
-        ['?;x / ((?;y)^(?;n))',['n isa "number"','canonical_compare(x,y)=0'],'x^eval(1-n)'],
+        ['(?;x)^(m_number;n) / (?;y)^(m_number;m)',['canonical_compare(x,y)=0'],'x^eval(n-m)'],
+        ['(?;x)^(m_number;n) / ?;y',['canonical_compare(x,y)=0'],'x^eval(n-1)'],
+        ['?;x / ((?;y)^(m_number;n))',['canonical_compare(x,y)=0'],'x^eval(1-n)'],
         ['?;x / ?;y',['canonical_compare(x,y)=0'],'x^0'],
         // rest/x/y or rest/x*y
-        ['(?;rest/((?;x)^(?;n))) * (?;y)^(?;m)',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(m-n)'],
-        ['(?;rest/((?;x)^(?;n))) * ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(1-n)'],
-        ['(?;rest/?;x) * (?;y)^(?;n)',['n isa "number"','canonical_compare(x,y)=0'],'rest*x^eval(1-n)'],
-        ['(?;rest/((?;x)^(?;n))) / ((?;y)^(?;m))',['n isa "number"','m isa "number"','canonical_compare(x,y)=0'],'rest/(x^eval(n+m))'],
-        ['(?;rest/((?;x)^(?;n))) / ?;y',['n isa "number"','canonical_compare(x,y)=0'],'rest/(x^eval(n+1))'],
-        ['(?;rest/?;x) / ((?;y)^(?;n))',['n isa "number"','canonical_compare(x,y)=0'],'rest/(x^eval(1+n))'],
+        ['(?;rest/((?;x)^(m_number;n))) * (?;y)^(m_number;m)',['canonical_compare(x,y)=0'],'rest*x^eval(m-n)'],
+        ['(?;rest/((?;x)^(m_number;n))) * ?;y',['canonical_compare(x,y)=0'],'rest*x^eval(1-n)'],
+        ['(?;rest/?;x) * (?;y)^(m_number;n)',['canonical_compare(x,y)=0'],'rest*x^eval(1-n)'],
+        ['(?;rest/((?;x)^(m_number;n))) / ((?;y)^(m_number;m))',['canonical_compare(x,y)=0'],'rest/(x^eval(n+m))'],
+        ['(?;rest/((?;x)^(m_number;n))) / ?;y',['canonical_compare(x,y)=0'],'rest/(x^eval(n+1))'],
+        ['(?;rest/?;x) / ((?;y)^(m_number;n))',['canonical_compare(x,y)=0'],'rest/(x^eval(1+n))'],
         ['(?;rest/?;x) / ?;y',['canonical_compare(x,y)=0'],'rest/(x^2)'],
         ['(?;rest/?;x) * ?;y',['canonical_compare(x,y)=0'],'rest/(x^0)']
     ],
@@ -5339,24 +5363,23 @@ var expandBracketsRules = [
 ]
 // other new rules 
 var trigSurdsRules = [
-	['sin(?;n)',['n isa "number"','isint(3*n/pi)','!(isint(n/pi))'],'eval(sin(n)*2/sqrt(3))*sqrt(3)/2'],
-	['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(sin(n/m)*2/sqrt(3))*sqrt(3)/2'],
-	['cos(?;n)',['n isa "number"','isint(3*n/pi)','!(isint(n/pi))'],'eval(cos(n)*2)/2'],
-	['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(cos(n/m)*2)/2'],
-	['tan(?;n)',['n isa "number"','isint(3*n/pi)','!(isint(n/pi))'],'eval(tan(n)/sqrt(3))*sqrt(3)'],
-	['tan(?;n/?;m)',['n isa "number"','m isa "number"','isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(tan(n/m)/sqrt(3))*sqrt(3)'],
-	['sin(?;n)',['n isa "number"','isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(sin(n)*2)/2'],
-	['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(sin(n/m)*2)/2'],
-	['cos(?;n)',['n isa "number"','isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(cos(n)*2/sqrt(3))*sqrt(3)/2'],
-	['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(cos(n/m)*2/sqrt(3))*sqrt(3)/2'],
-	['tan(?;n)',['n isa "number"','isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(tan(n)*sqrt(3))/sqrt(3)'],
-	['tan(?;n/?;m)',['n isa "number"','m isa "number"','isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(tan(n/m)*sqrt(3))/sqrt(3)'],
-	['sin(?;n)',['n isa "number"','isint(4*n/pi)','!(isint(2*n/pi))'],'eval(sin(n)*sqrt(2))/sqrt(2)'],
-	['sin(?;n/?;m)',['n isa "number"','m isa "number"','isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(sin(n/m)*sqrt(2))/sqrt(2)'],
-	['cos(?;n)',['n isa "number"','isint(4*n/pi)','!(isint(2*n/pi))'],'eval(cos(n)*sqrt(2))/sqrt(2)'],
-	['cos(?;n/?;m)',['n isa "number"','m isa "number"','isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(cos(n/m)*sqrt(2))/sqrt(2)'],
-	['tan(?;n)',['n isa "number"','isint(4*n/pi)','!(isint(2*n/pi))'],'eval(tan(n))'],
-	['tan(?;n/?;m)',['n isa "number"','m isa "number"','isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(tan(n/m))'] 
+	['sin(m_number;n/3*pi)',['mod(n,3)<>0'],'eval(sin(n/3*pi)*2/sqrt(3))*sqrt(3)/2'],
+	['cos(m_number;n)',['isint(3*n/pi)','!(isint(n/pi))'],'eval(cos(n)*2)/2'],
+	['cos(m_number;n/m_number;m)',['isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(cos(n/m)*2)/2'],
+	['tan(m_number;n)',['isint(3*n/pi)','!(isint(n/pi))'],'eval(tan(n)/sqrt(3))*sqrt(3)'],
+	['tan(m_number;n/m_number;m)',['isint(3*(n/m)/pi)','!(isint((n/m)/pi))'],'eval(tan(n/m)/sqrt(3))*sqrt(3)'],
+	['sin(m_number;n)',['isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(sin(n)*2)/2'],
+	['sin(m_nmber;n/m_number;m)',['isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(sin(n/m)*2)/2'],
+	['cos(m_number;n)',['isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(cos(n)*2/sqrt(3))*sqrt(3)/2'],
+	['cos(m_number;n/m_number;m)',['isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(cos(n/m)*2/sqrt(3))*sqrt(3)/2'],
+	['tan(m_number;n)',['isint(6*n/pi)','!(isint(3*n/pi))','!(isint(2*n/pi))'],'eval(tan(n)*sqrt(3))/sqrt(3)'],
+	['tan(m_number;n/m_number;m)',['isint(6*(n/m)/pi)','!(isint(3*(n/m)/pi))','!(isint(2*(n/m)/pi))'],'eval(tan(n/m)*sqrt(3))/sqrt(3)'],
+	['sin(m_number;n)',['isint(4*n/pi)','!(isint(2*n/pi))'],'eval(sin(n)*sqrt(2))/sqrt(2)'],
+	['sin(m_number;n/m_number;m)',['isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(sin(n/m)*sqrt(2))/sqrt(2)'],
+	['cos(m_number;n)',['isint(4*n/pi)','!(isint(2*n/pi))'],'eval(cos(n)*sqrt(2))/sqrt(2)'],
+	['cos(m_number;n/m_number;m)',['isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(cos(n/m)*sqrt(2))/sqrt(2)'],
+	['tan(m_number;n)',['isint(4*n/pi)','!(isint(2*n/pi))'],'eval(tan(n))'],
+	['tan(m_number;n/m_number;m)',['isint(4*(n/m)/pi)','!(isint(2*(n/m)/pi))'],'eval(tan(n/m))'] 
 ]
 var oddEvenRules = [
 	['sin(-?;x)',[],'-sin(x)'],
@@ -5365,17 +5388,14 @@ var oddEvenRules = [
 	['sinh(-?;x)',[],'-sinh(x)'],
 	['cosh(-?;x)',[],'cosh(x)'],
 	['tanh(-?;x)',[],'-tanh(x)'],
-	['(-?;x)^(?;n)',['n isa "number"',"isint(n/2)"],'x^n'],
-	['(-?;x)^(?;n)',['n isa "number"',"isint((n-1)/2)"],'-x^n']
+	['(-?;x)^(m_number;n)',["isint(n/2)"],'x^n'],
+	['(-?;x)^(m_number;n)',["isint((n-1)/2)"],'-x^n']
 ]
 var commonFactorsRules = [
-	['?;n*(?;x)+?;n*(?;y)',['n isa "number"'],'n*(x+y)']
+	['m_number;n*(?;x)+?;n*(?;y)',[],'n*(x+y)']
 ]
 var calcErrorRules = [
-	['?;x',['x isa "number"','x>-0.0000000001','x<0'],'0'],
-	['?;x',['x isa "number"','x<0.0000000001','x>0'],'0'],
-	['?;x',['x isa "number"','x>0.9999999999','x<1'],'1'],
-	['?;x',['x isa "number"','x<1.0000000001','x>1'],'1'],
+    ['m_number;n',['withintolerance(n,round(n),1e-10)'],'eval(round(n))']
 ]
 
 /** Compile an array of rules (in the form `[pattern,conditions[],result]` to {@link Numbas.jme.rules.Rule} objects
@@ -6158,7 +6178,7 @@ jme.Parser.prototype = /** @lends Numbas.jme.Parser.prototype */ {
                 var str = result[2];
                 token = new TString(jme.unescape(str));
             } else if(result = expr.match(this.re.re_keypair)) {
-                if(tokens.length==0 || tokens[tokens.length-1].type!='string') {
+                if(tokens.length==0 || (tokens[tokens.length-1].type!='string' && tokens[tokens.length-1].type!='name')) {
                     throw(new Numbas.Error('jme.tokenise.keypair key not a string',{type: tokens[tokens.length-1].type}));
                 }
                 token = new TKeyPair(tokens.pop().value);
@@ -6687,8 +6707,9 @@ Scope.prototype = /** @lends Numbas.jme.Scope.prototype */ {
                 return scope.getFunction(op)[0].evaluate(tree.args,scope);
             }
             else {
+                var args = [];
                 for(var i=0;i<tree.args.length;i++) {
-                    tree.args[i] = scope.evaluate(tree.args[i],null,noSubstitution);
+                    args.push(scope.evaluate(tree.args[i],null,noSubstitution));
                 }
                 var matchedFunction;
                 var fns = scope.getFunction(op);
@@ -6710,18 +6731,18 @@ Scope.prototype = /** @lends Numbas.jme.Scope.prototype */ {
                 for(var j=0;j<fns.length; j++)
                 {
                     var fn = fns[j];
-                    if(fn.typecheck(tree.args))
+                    if(fn.typecheck(args))
                     {
                         matchedFunction = fn;
                         break;
                     }
                 }
                 if(matchedFunction)
-                    return matchedFunction.evaluate(tree.args,scope);
+                    return matchedFunction.evaluate(args,scope);
                 else {
-                    for(var i=0;i<=tree.args.length;i++) {
-                        if(tree.args[i] && tree.args[i].unboundName) {
-                            throw(new Numbas.Error('jme.typecheck.no right type unbound name',{name:tree.args[i].name}));
+                    for(var i=0;i<=args.length;i++) {
+                        if(args[i] && args[i].unboundName) {
+                            throw(new Numbas.Error('jme.typecheck.no right type unbound name',{name:args[i].name}));
                         }
                     }
                     throw(new Numbas.Error('jme.typecheck.no right type definition',{op:op}));
@@ -8231,9 +8252,7 @@ newBuiltin('gcd_without_pi_or_i', [TNum,TNum], TNum, function(a,b) {    // take 
         if(b.complex && b.re==0) {
             b = b.im;
         }
-        a = a/math.pow(Math.PI,math.piDegree(a));
-        b = b/math.pow(Math.PI,math.piDegree(b));
-        return math.gcf(a,b);
+        return math.gcf(math.removePi(a),math.removePi(b));
 } );
 newBuiltin('lcm', [TNum,TNum], TNum, math.lcm );
 newBuiltin('lcm', [TList], TNum, function(l){
